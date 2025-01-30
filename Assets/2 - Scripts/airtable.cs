@@ -55,7 +55,6 @@ public class airtable : MonoBehaviour
     public class Fields
     {
         public string Customer;
-        public string Prices;
     }
 
 
@@ -197,8 +196,7 @@ public class airtable : MonoBehaviour
         {
             fields = new Fields
             {
-                Customer = _name,
-                Prices = "zero"
+                Customer = _name
             }
         };
 
