@@ -12,12 +12,13 @@ using System.Text;
 using UnityEngine.UI;
 using TMPro;
 using System;
+using Newtonsoft.Json.Linq;
 
 public class airtable : MonoBehaviour
 {
     // Airtable API information
     private string apiKey = "patJoVBHS8XCwyLGK.4bcef627416ad3eaf1bae3848e41eff881ba948917aa3e1368d2d2a07787cc45";
-    private string baseID = "appitujjKf4JFBgiI";
+    private string baseId = "appitujjKf4JFBgiI";
     private string tableName = "Prices";
 
     private string apiUrl;
@@ -31,7 +32,7 @@ public class airtable : MonoBehaviour
     // Start is called before the first frame update
     void Start()
     {
-        apiUrl = $"https://api.airtable.com/v0/{baseID}/{tableName}";
+        apiUrl = $"https://api.airtable.com/v0/{baseId}/{tableName}";
         // Start coroutine to fetch data from Airtable
         StartCoroutine(GetRecordsFromAirtable());
     }
@@ -65,7 +66,78 @@ public class airtable : MonoBehaviour
 
     public void EnterPrice(int _price)
     {
-        StartCoroutine(AddNewItemPrice(_price));
+        StartCoroutine(GetRecordId(name, _price));
+    }
+
+    private IEnumerator GetRecordId(string userName, int newScore)
+    {
+        string url = $"https://api.airtable.com/v0/{baseId}/{tableName}?filterByFormula={{Customer}}='{userName}'";
+
+        using (UnityWebRequest request = UnityWebRequest.Get(url))
+        {
+            request.SetRequestHeader("Authorization", $"Bearer {apiKey}");
+            request.SetRequestHeader("Content-Type", "application/json");
+
+            yield return request.SendWebRequest();
+
+            if (request.result == UnityWebRequest.Result.Success)
+            {
+                Debug.Log("Response: " + request.downloadHandler.text);
+
+                JObject jsonResponse = JObject.Parse(request.downloadHandler.text);
+                JArray records = (JArray)jsonResponse["records"];
+
+                if (records.Count > 0)
+                {
+                    string recordId = records[0]["id"].ToString(); // Get the first matching record ID
+                    Debug.Log("Find user + " + recordId);
+                    StartCoroutine(UpdateRecord(recordId, newScore));
+                }
+                else
+                {
+                    Debug.LogError("User not found in Airtable.");
+                }
+            }
+            else
+            {
+                Debug.LogError("Error fetching record ID: " + request.error);
+            }
+        }
+    }
+
+    private IEnumerator UpdateRecord(string recordId, int newScore)
+    {
+        string url = $"https://api.airtable.com/v0/{baseId}/{tableName}/{recordId}";
+
+        var requestBody = new
+        {
+            fields = new
+            {
+                Price = newScore
+            }
+        };
+
+        string jsonPayload = JsonConvert.SerializeObject(requestBody);
+        byte[] bodyRaw = Encoding.UTF8.GetBytes(jsonPayload);
+
+        using (UnityWebRequest request = new UnityWebRequest(url, "PATCH"))
+        {
+            request.uploadHandler = new UploadHandlerRaw(bodyRaw);
+            request.downloadHandler = new DownloadHandlerBuffer();
+            request.SetRequestHeader("Authorization", $"Bearer {apiKey}");
+            request.SetRequestHeader("Content-Type", "application/json");
+
+            yield return request.SendWebRequest();
+
+            if (request.result == UnityWebRequest.Result.Success)
+            {
+                Debug.Log("Successfully updated Airtable record: " + request.downloadHandler.text);
+            }
+            else
+            {
+                Debug.LogError("Error updating Airtable: " + request.error);
+            }
+        }
     }
 
     public IEnumerator AddNewItemPrice(int _price)
@@ -83,21 +155,24 @@ public class airtable : MonoBehaviour
         //}
 
 
-            Airtable newOrder = new Airtable
-            {
-                fields = new Fields {
-                    Customer = name,
-                    Prices = "Fifty"
-                }
-            };
+        //    Airtable newOrder = new Airtable
+        //    {
+        //        fields = new Fields {
+        //            Customer = name,
+        //            Prices = "Fifty"
+        //        }
+        //    };
 
-        string jsonData = JsonConvert.SerializeObject(newOrder);
-        byte[] bodyRaw = Encoding.UTF8.GetBytes(jsonData);
+        //string jsonData = JsonConvert.SerializeObject(newOrder);
+        //byte[] bodyRaw = Encoding.UTF8.GetBytes(jsonData);
+
+        string jsonPayload = "{ \"fields\": { \"Price\": 100 } }";
 
         //Test comment
 
-        using (UnityWebRequest request = new UnityWebRequest(apiUrl, "PUT"))
+        using (UnityWebRequest request = new UnityWebRequest(apiUrl, "PATCH"))
         {
+            byte[] bodyRaw = System.Text.Encoding.UTF8.GetBytes(jsonPayload);
             request.uploadHandler = new UploadHandlerRaw(bodyRaw);
             request.downloadHandler = new DownloadHandlerBuffer();
             request.SetRequestHeader("Authorization", "Bearer " + apiKey);
@@ -149,6 +224,7 @@ public class airtable : MonoBehaviour
 
                 if (request.result == UnityWebRequest.Result.Success)
                 {
+                    name = airtable.fields.Customer;
                     Debug.Log("New record added successfully!");
                     Debug.Log("Response: " + request.downloadHandler.text);
                 }
